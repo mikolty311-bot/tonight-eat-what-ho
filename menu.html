@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日諗夜諗 - 智能廚房</title>
+    <style>
+        :root { --primary: #000; --accent: #d32f2f; --bg: #f8f9fa; --green: #27ae60; }
+        body { font-family: "PingFang HK", "Heiti TC", sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+        .container { max-width: 1200px; margin: auto; }
+
+        /* 今晚菜單顯示區 */
+        .tonight-menu {
+            background: #fff; border: 3px dashed var(--primary); border-radius: 15px;
+            padding: 15px; margin-bottom: 25px; text-align: center;
+        }
+        .menu-items { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 15px 0; min-height: 40px; }
+        .menu-item-tag { 
+            background: var(--primary); color: #fff; padding: 6px 15px; 
+            border-radius: 20px; font-size: 0.9rem; display: flex; align-items: center;
+        }
+        
+        /* 按鈕樣式 */
+        .btn { border: none; padding: 10px 20px; border-radius: 50px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 1rem; }
+        .btn-spin { background: var(--accent); color: white; }
+        .btn-add { background: var(--green); color: white; display: none; }
+        .btn-reset { background: #666; color: white; margin-top: 10px; }
+        .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
+        /* 老虎機 */
+        .slot-machine {
+            background: #fff; border: 4px solid var(--primary); border-radius: 20px;
+            padding: 20px; text-align: center; margin-bottom: 30px;
+        }
+        .slot-display { font-size: 2.2rem; font-weight: bold; margin: 15px 0; color: var(--accent); min-height: 60px; }
+
+        /* Tab & Grid */
+        .tabs { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-bottom: 20px; }
+        .tab-btn { background: #fff; border: 1px solid #ccc; padding: 8px 12px; cursor: pointer; border-radius: 5px; font-size: 0.9rem; }
+        .tab-btn.active { background: var(--primary); color: #fff; }
+
+        .content-section { display: none; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; }
+        .content-section.active { display: grid; }
+        
+        .dish-card { background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 12px; display: flex; flex-direction: column; }
+        .dish-name { font-size: 1.1rem; font-weight: bold; margin-bottom: 8px; min-height: 2.5rem; }
+        .ingredients { background: #f0f0f0; padding: 8px; border-radius: 8px; font-size: 0.8rem; margin: 10px 0; color: #555; flex-grow: 1; }
+        .yt-link { display: block; text-align: center; background: #ff0000; color: white; text-decoration: none; padding: 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="tonight-menu">
+        <strong>🏠 今晚菜單 (最多3菜1湯)</strong>
+        <div class="menu-items" id="selectedList"><span style="color: #999;">尚未加入菜色...</span></div>
+        <button class="btn btn-reset" onclick="resetMenu()">清空並重抽 🔄</button>
+    </div>
+
+    <div class="slot-machine">
+        <h2 style="margin:0; letter-spacing: 3px;">🎲 抽吓今晚食咩好</h2>
+        <div class="slot-display" id="slotText">？？？</div>
+        <button class="btn btn-spin" id="spinBtn" onclick="spinSlot()">開始抽取 🎰</button>
+        <button class="btn btn-add" id="addToMenuBtn" onclick="addCurrentToMenu()">加入菜單 +</button>
+    </div>
+
+    <div class="tabs" id="tabContainer"></div>
+    <div id="contentGrid"></div>
+</div>
+
+<script>
+const menuData = {
+    "豬肉": [
+        { name: "豉油豬排", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蝦醬蒸腩片", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "焗金莎骨", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豬頸肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蓮藕炆腩肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "咕嚕肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒸腩排", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "青瓜雲耳炒肉片", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "韓式豬手", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒸冬菇土尤馬蹄肉餅", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "毛豆肉碎", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "漢堡排", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "回鍋肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "水煎五花肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "泰式豬頸肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白菜豬肉芽菜本菇千層鍋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "日式薯仔燉肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "熏蹄", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "牛肉": [
+        { name: "紅酒燉牛肋條", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "牛仔骨", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "菜芯炒牛肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "老水牛展", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "老水拼盤", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "沙茶肥牛金菇", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "榨菜炒牛肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蔥爆牛肉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "牛肉薯餅", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "雞肉": [
+        { name: "啫啫雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蝦醬雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "焗雞槌", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "地中海雞槌", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "醉雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "栗子炆雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "冬菇蒸雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "口水雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白切雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豉油雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "翠玉瓜炒雞柳", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "泰式香茅雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "牛油雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蔥油手撕雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "南乳雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豉油雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "照燒雞排", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "菜肉雲吞雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "B仔雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "鹽水雞", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豆豉雞煲", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "冬瓜蟲草花蒸雞翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "唐揚雞", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "魚類": [
+        { name: "檸檬牛油煎比目魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "味噌三文魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白蘿蔔魚湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "油鹽水浸魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "栗米魚柳", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎三文魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎三文魚翼", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "焗SEA BASS", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "鹽焗烏頭", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "大眼雞豆醬", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎倉魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒸比目魚柳", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "海鮮": [
+        { name: "大蝦粉絲豆腐煲", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "三文魚頭味噌湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒜蓉蒸扇貝", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蝦滑煎豆卜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白灼蝦", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "節瓜蝦滑", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "鹽焗鮑魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "茄汁蝦", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "花甲", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白灼尤魚", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "大蝦米紙卷", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "西蘭花炒鮮尤", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蝦餅", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "胡椒浸蠔", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒸蓉粉絲蒸蝦", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "素菜/豆腐": [
+        { name: "煎蛋角", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒜蓉蒸茄子", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "焗雞槌(素)", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "地中海雞槌(素)", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蕃茄炒蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "翠玉瓜炒木耳", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "黃金豆腐", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "花甲蒸水蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "帶子蒸水蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "叉燒炒蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "醬油茄子", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "麻油拍青瓜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "醬油糖心蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "凍蕃茄", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎釀尖椒", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "老少平安", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "欖菜肉鬆四季豆", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "麻婆豆腐", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "冬瓜蝦米粉絲", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "鯪魚蝦仁豆腐煲", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "栗米魚肚羹", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "金銀蛋蝦仁浸絲瓜", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "真係菜": [
+        { name: "椰菜花本菇", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒜蓉白菜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "通菜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蝦醬西蘭花炒蝦仁", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豆豉鯪魚油麥菜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "金銀蛋上湯白菜", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "清炒木耳蜜糖豆", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "意粉": [
+        { name: "茄汁蝦意粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "奶油大蝦意粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "白汁吞拿魚意粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蘑菇雞肉意粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蒜香忌廉雞肉螺絲粉", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "HEA食": [
+        { name: "忌廉湯火腿通粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "臘腸飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蛋炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豬頸肉毛豆炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "煎蛋肉碎飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "紫菜炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "牛肉飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "魚湯牛肉烏冬", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蕃茄肉碎通粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "排骨擔擔麵", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "海鮮粥", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "肉醬蝴蝶粉", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "三文魚炊飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "泰式肉碎炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豚汁烏冬", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "麻醬雞絲烏冬", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "羅宋湯配法包", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "POKE BOWL", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蠔仔泡飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豚肉栗米芝士炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "上海粗炒", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "泰式炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "咸魚雞粒炒飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "北菇滑雞飯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蠔皇炆花膠冬菇撈飯", ing2: "待填寫...", ing4: "待填寫..." }
+    ],
+    "湯水": [
+        { name: "茶樹菇蟲草花蘿蔔粟米湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "三文魚頭味噌湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "羅漢果雪梨水", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "菜乾豬骨湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "羅漢果陳皮麥冬水", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "木瓜魚尾湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "花旗參螺頭雞湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "竹蔗茅根紅蘿蔔馬蹄粟米梨乾瘦肉湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "木瓜雞腳湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "羊肚菌螺咀排骨湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "竹蔗茅根水", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "芫茜咸蛋肉片湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "檸檬薏米水", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "節瓜章魚花生眉豆湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "粉葛赤小豆鯪魚湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "節瓜滾沙白咸蛋", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "咸菜豬肚湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "意式雜菜湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "豚汁", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "金銀菜陳腎湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "蓮藕章魚綠豆湯", ing2: "待填寫...", ing4: "待填寫..." },
+        { name: "青紅蘿蔔豬骨湯", ing2: "待填寫...", ing4: "待填寫..." }
+    ]
+};
+
+let tonightMenu = [];
+let currentRoll = "";
+
+function init() {
+    const tabC = document.getElementById('tabContainer');
+    const gridC = document.getElementById('contentGrid');
+
+    Object.keys(menuData).forEach((cat, index) => {
+        const btn = document.createElement('button');
+        btn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
+        btn.innerText = cat;
+        btn.onclick = (e) => switchTab(cat, e.target);
+        tabC.appendChild(btn);
+
+        const section = document.createElement('div');
+        section.id = `cat-${cat}`;
+        section.className = `content-section ${index === 0 ? 'active' : ''}`;
+        
+        menuData[cat].forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'dish-card';
+            const sid = btoa(unescape(encodeURIComponent(item.name))).substring(0,8);
+            card.innerHTML = `
+                <div class="dish-name">${item.name}</div>
+                <div style="font-size:0.75rem">
+                    <input type="radio" name="r-${sid}" checked onclick="chIng('${sid}','${item.ing2}')"> 2人 
+                    <input type="radio" name="r-${sid}" onclick="chIng('${sid}','${item.ing4}')"> 4人
+                </div>
+                <div class="ingredients" id="i-${sid}">${item.ing2}</div>
+                <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(item.name + ' 食譜')}" target="_blank" class="yt-link">📺 YouTube</a>
+            `;
+            section.appendChild(card);
+        });
+        gridC.appendChild(section);
+    });
+}
+
+function chIng(id, txt) { document.getElementById('i-'+id).innerText = txt; }
+
+function switchTab(cat, el) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById(`cat-${cat}`).classList.add('active');
+}
+
+function spinSlot() {
+    const all = Object.values(menuData).flat();
+    let c = 0;
+    document.getElementById('addToMenuBtn').style.display = 'none';
+    const inv = setInterval(() => {
+        currentRoll = all[Math.floor(Math.random() * all.length)].name;
+        document.getElementById('slotText').innerText = currentRoll;
+        if(c++ > 15) {
+            clearInterval(inv);
+            document.getElementById('addToMenuBtn').style.display = 'inline-block';
+        }
+    }, 60);
+}
+
+function addCurrentToMenu() {
+    if (tonightMenu.length >= 4) return alert("菜單已滿！請先重抽清空。");
+    if (tonightMenu.includes(currentRoll)) return alert("已經加過呢個喇！");
+    tonightMenu.push(currentRoll);
+    renderTonightMenu();
+}
+
+function renderTonightMenu() {
+    const list = document.getElementById('selectedList');
+    if(tonightMenu.length === 0) { list.innerHTML = '<span style="color: #999;">尚未加入菜色...</span>'; return; }
+    list.innerHTML = tonightMenu.map(m => `<span class="menu-item-tag">${m}</span>`).join('');
+}
+
+function resetMenu() {
+    tonightMenu = [];
+    renderTonightMenu();
+    document.getElementById('slotText').innerText = "？？？";
+    document.getElementById('addToMenuBtn').style.display = 'none';
+}
+
+init();
+</script>
+</body>
+</html>
